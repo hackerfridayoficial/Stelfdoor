@@ -1,0 +1,5 @@
+admin
+adm
+msfadmin
+test
+smithy

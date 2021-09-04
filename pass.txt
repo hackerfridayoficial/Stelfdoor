@@ -1,0 +1,8 @@
+msfadmin
+admin
+adm
+toor
+root
+test
+password
+123
