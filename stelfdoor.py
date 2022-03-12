@@ -1,27 +1,40 @@
-#!/usr/bin/python3.8
+#!/usr/bin/python3.9
 # -*- coding: utf-8 -*-
 
-import re
-import requests
-import sys
-import socket
-import time
+import ipaddress
 import os
+import random
+import re
+import socket
+import struct
+import sys
+import time
+import dns.resolver
+import requests
+
+from threading import Thread
 
 
 # Ajuda
 def Help():
-    print("\n[?]--> Help <--[?]\n\nExample: python stelfdoor.py [-ARG] [HOST]\n\n[DOOR SCANNER]\n\n -m -> To scan "
-          "main ports\n -a -> To scan all possible ports from 1 to 65535\n -c -> To scan only 20 ports of your "
+    print("\n[?]--> Help <--[?]\n\nExample: python3.9 stelfdoor.py [HOST] [--ARG]\n\n[DOOR SCANNER]\n\n -m_T1, -m_T2, "
+          "-m_T3, -m_T4 -m_T5 --> To scan "
+          "main ports\n -a_T1, --a_T2, "
+          "-a_T3, -a_T4 -a_T5 --> To scan all possible ports from 1 to 65535\n -c_T1, -c_T2, "
+          "-c_T3, -c_T4 -c_T5 --> To scan only 20 ports of your "
           "choice\n")
-    print("[DIRECTORY SCANNER]\n\n -D -> To search for directories\n")
-    print("[BRUTE FORCE ATTACKE - FTP]\n\n --ftp -> With this option it is possible to perform a brute force attack "
+
+    print("[DIRECTORY SCANNER]\n\n --dir --> To search for directories\n--sub --> Search for subdomains or dns\n")
+
+    print("[BRUTE FORCE ATTACKE]\n\n --ftp --> With this option it is possible to perform a brute force attack "
           "based on a wordlist containing possible passwords in FTP services\n")
+
+    print("[CRAWLERS]\n\n--spider --> search for internal and external links within the site\n")
 
 
 # Desenvolvedor
 def Info():
-    print("Developer - Matheus Carvalho Da Silva")
+    print("Developer by - Matheus Carvalho Da Silva")
 
 
 # Verificação de argumentos
@@ -161,11 +174,10 @@ def All_The_Dors():
 def Choice_Of_Dors():
     ports3 = []
     count = 0
-    print("Digite 20 portas personalizadas\n")
+    print("ATENÇAO A PORTA NAO PODE FICAR EM BRANCO !!!\n\nDigite 20 portas\n")
 
-    while count < 20:
-        ports3.append(int(input("Digite a porta: ")))
-
+    while count != 20:
+        ports3.append(int(input("Port :: ")))
         count += 1
 
     for port3 in ports3:
@@ -198,28 +210,88 @@ def Choice_Of_Dors():
         pass
 
 
+# Web Crawler de links
+def Web_Crawler():
+    to_crawl = [sys.argv[1]]
+    crawled = set()
+
+    header = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                            'AppleWebKit/537.36 (KHTML, like Gecko'
+                            'Chrome/51.0.2704.103 Safari/537.36'}
+
+    while True:
+        url = to_crawl[0]
+        try:
+            req = requests.get(url, headers=header)
+        except:
+            to_crawl.remove(url)
+            crawled.add(url)
+            continue
+
+        html = req.text
+        links = re.findall(r'<a href="?\'?(https?:\/\/[^"\'>]*)', html)
+        print('Crawling:', url)
+
+        to_crawl.remove(url)
+        crawled.add(url)
+
+        for link in links:
+            if link not in crawled and link not in to_crawl:
+                to_crawl.append(link)
+
+
 # Brute-Force de diretórios em aplicação web
 def Brute_Force_Dyrectory():
     arquivo = open('common.txt')
 
     lines = arquivo.readlines()
 
+    header = {'user-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0'}
+
     for line in lines:
-        requisicao = requests.get(sys.argv[1] + "/" + line)
+        requisicao = requests.get('https://' + sys.argv[1] + "/" + line, headers=header, allow_redirects=False)
         code = requisicao.status_code
 
         if code == 200:
-            print(sys.argv[1] + line + 'Code: ' + str(code), '\n')
+            print("Foud :: " + 'https://' + sys.argv[1] + '/' + line + 'Code: ' + str(code), '\n')
         elif code == 403:
-            print(sys.argv[1] + line + 'Code: ' + str(code), '\n')
+            print("Forbiden :: " + 'https://' + sys.argv[1] + '/' + line + 'Code: ' + str(code), '\n')
         else:
-            print("Not Foud" + sys.argv[1] + line + 'Code: ' + str(code), '\n')
+            continue
 
 
-# Brute-Force de serviço FTP
+# Brute-Force de sub_diretorios
+def Sub_Domain():
+    argvs = sys.argv
+
+    try:
+        domain = argvs[1]
+        sub_wordlist = argvs[3]
+    except:
+        print("Faltam argumentos no comando")
+        sys.exit(1)
+
+    try:
+        arquivo = open(sub_wordlist)
+        lines = arquivo.read().splitlines()
+    except:
+        print("Arquivo nao encontrao ou invalido")
+        sys.exit(1)
+
+    for line in lines:
+        subdominio = line + '.' + domain
+        try:
+            req = dns.resolver.resolve(subdominio, 'a')
+            for result in req:
+                print(subdominio, result)
+        except:
+            pass
+
+
+# Brute Force de serviço FTP
 def Brute_Force_Ftp():
     if len(sys.argv) < 6 or sys.argv[3] != "-l" or sys.argv[5] != "-w":
-        print("Use > python stelfdoor.py --ftp 127.0.0.1 -l ")
+        print("Use > python3.9 stelfdoor.py --ftp 127.0.0.1 -l [USER] -w [WORDLIST]")
         sys.exit()
     else:
         pass
@@ -243,7 +315,7 @@ def Brute_Force_Ftp():
         time.sleep(0.10)
         s.send(b"QUIT\r\n")
 
-        if re.search("230", '%s' % code.decode()):
+        if re.search(r"230", '%s' % code.decode()):
             print("[+] ====> SENHA ENCONTRADA :: %s" % line)
             break
         else:
@@ -251,7 +323,101 @@ def Brute_Force_Ftp():
             continue
 
 
-# Argumentos
+# Ping Sweep
+def Ping_Sweep():
+    def checksum(source_string):
+        sum1 = 0
+        count_to = (len(source_string) / 2) * 2
+        count = 0
+        while count < count_to:
+            this_val = source_string[count + 1] * 256 + source_string[count]
+            sum1 = sum1 + this_val
+            sum1 = sum1 & 0xffffffff
+            count = count + 2
+        if count_to < len(source_string):
+            sum1 = sum1 + source_string[len(source_string) - 1]
+            sum1 = sum1 & 0xffffffff
+        sum1 = (sum1 >> 16) + (sum1 & 0xffff)
+        sum1 = sum1 + (sum1 >> 16)
+        answer = ~sum1
+        answer = answer & 0xffff
+        answer = answer >> 8 | (answer << 8 & 0xff00)
+        return answer
+
+    def create_packet(id1):
+        header = struct.pack('bbHHh', 8, 0, 0, id1, 1)
+        data = 192 * 'Q'
+        data = data.encode('utf-8')
+        my_checksum = checksum(header + data)
+        header = struct.pack('bbHHh', 8, 0, socket.htons(my_checksum), id1, 1)
+        return header + data
+
+    def ping(addr, timeout=1):
+        global my_socket
+        try:
+            my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        except Exception as e:
+            print(e)
+        packet_id = int((id(timeout) * random.random()) % 65535)
+        packet = create_packet(packet_id)
+        my_socket.connect((addr, 80))
+        my_socket.sendall(packet)
+        my_socket.close()
+
+    def rotate(addr, file_name1, wait1, responses1):
+        print("Sending Packets", time.strftime("%X %x %Z"))
+        for ip in addr:
+            ping(str(ip))
+            time.sleep(wait1)
+        print("All packets sent", time.strftime("%X %x %Z"))
+
+        print("Waiting for all responses")
+        time.sleep(2)
+
+        # Stoping listen
+        global SIGNAL
+        SIGNAL = False
+        ping('127.0.0.1')  # Final ping to trigger the false signal in listen
+
+        print(len(responses1), "hosts found!")
+        print("Writing File")
+
+        for response in sorted(responses1):
+            ip = struct.unpack('BBBB', response)
+            ip = str(ip[0]) + "." + str(ip[1]) + "." + str(ip[2]) + "." + str(ip[3])
+            file = open(file_name1, 'a')
+            file.write(str(ip) + '\n')
+
+        print("Done", time.strftime("%X %x %Z"))
+
+    def listen(responses1):
+        s2 = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        s2.bind(('', 1))
+        print("Listening")
+        while SIGNAL:
+            packet = s2.recv(1024)[:20][-8:-4]
+            responses1.append(packet)
+        print("Stop Listening")
+        s2.close()
+
+    SIGNAL = True
+
+    responses = []
+
+    ips = str(sys.argv[1]) + '/20'  # Internet network
+    wait = 0.002  # Adjust this based in your bandwidth (Faster link is Lower wait)
+    file_name = 'log.txt'
+
+    ip_network = ipaddress.ip_network(str(ips), strict=False)
+
+    t_server = Thread(target=listen, args=[responses])
+    t_server.start()
+
+    t_ping = Thread(target=rotate, args=[ip_network, file_name, wait, responses])
+    t_ping.start()
+
+
+# Verificaçao de Argumentos
 if sys.argv[2] == '-m_T1':
     Main_Dors()
 elif sys.argv[2] == '-m_T2':
@@ -287,9 +453,15 @@ if sys.argv[2] == '-c_T5':
 
 if sys.argv[2] == '--dir':
     Brute_Force_Dyrectory()
-
 if sys.argv[2] == "--ftp":
     Brute_Force_Ftp()
-
-if sys.argv[2] == '-h':
+if sys.argv[2] == "--sub":
+    Sub_Domain()
+if sys.argv[2] == '--help':
     Help()
+if sys.argv[2] == '--dev':
+    Info()
+if sys.argv[2] == '--spider':
+    Web_Crawler()
+if sys.argv[2] == '--sweep':
+    Ping_Sweep()
